@@ -161,7 +161,8 @@ def main(urls: List[str], filename: str) -> None:
 
                 tmp_filename = os.path.join("tmp", f"{filename}.part{str(idx).zfill(len(str(splitBy)))}")
                 if os.path.exists(tmp_filename):
-                    og_data = open(tmp_filename, "rb").read()
+                    with open(tmp_filename, "rb") as _fr:
+                        og_data = _fr.read()
                     if math.isclose(len(og_data), ranges[idx]["bytes"], abs_tol=1):
                         if not irange["downloaded"]:
                             total_iter.update(ranges[idx]["bytes"])
@@ -183,7 +184,7 @@ def main(urls: List[str], filename: str) -> None:
 
     except KeyboardInterrupt:
         stop = True
-        os.system("cls")
+        os.system("cls" if os.name == "nt" else "clear")
         print("Download Stopped")
         return
 
@@ -213,7 +214,10 @@ def main(urls: List[str], filename: str) -> None:
     print('File Size: {} bytes'.format(human_readable_bytes(os.path.getsize(filename))))
 
 def check_vid(video_path: pathlib.Path) -> bool:
-    output = subprocess.check_output(f'ffmpeg -i {video_path} -c copy -f null /dev/null -v warning', shell=True, stderr=subprocess.STDOUT)
+    output = subprocess.check_output(
+        ['ffmpeg', '-i', str(video_path), '-c', 'copy', '-f', 'null', os.devnull, '-v', 'warning'],
+        stderr=subprocess.STDOUT
+    )
     return not bool(output)
 
 

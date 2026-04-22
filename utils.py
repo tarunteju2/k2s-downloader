@@ -40,12 +40,12 @@ def get_working_proxies(refresh: bool = False):
             working_proxies.append(future.proxy)
         except KeyboardInterrupt:
             sys.exit()
-        except:
+        except Exception:
             continue
 
     with open("proxies.txt", "w") as f:
         f.write("\n".join(working_proxies))
 
-    os.system("cls")
+    os.system("cls" if os.name == "nt" else "clear")
 
     return [None] + working_proxies
