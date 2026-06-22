@@ -7,6 +7,11 @@ import requests
 from requests_futures.sessions import FuturesSession
 from tqdm import tqdm
 
+REQUEST_TIMEOUT = 20
+
+
+def clear_console() -> None:
+    os.system("cls" if os.name == "nt" else "clear")
 
 def get_working_proxies(refresh: bool = False):
 
@@ -19,9 +24,15 @@ def get_working_proxies(refresh: bool = False):
     proxies = []
 
     print("No proxies found, fetching proxies from api.proxyscrape.com...")
-    r = requests.get("https://api.proxyscrape.com/?request=getproxies&proxytype=https&timeout=10000&country=all&ssl=all&anonymity=all")
+    r = requests.get(
+        "https://api.proxyscrape.com/?request=getproxies&proxytype=https&timeout=10000&country=all&ssl=all&anonymity=all",
+        timeout=REQUEST_TIMEOUT,
+    )
     proxies += r.text.splitlines()
-    r = requests.get("https://api.proxyscrape.com/?request=getproxies&proxytype=http&timeout=10000&country=all&ssl=all&anonymity=all")
+    r = requests.get(
+        "https://api.proxyscrape.com/?request=getproxies&proxytype=http&timeout=10000&country=all&ssl=all&anonymity=all",
+        timeout=REQUEST_TIMEOUT,
+    )
     proxies += r.text.splitlines()
     working_proxies = []
     print(f"Checking {len(proxies)} proxies...")
@@ -40,12 +51,12 @@ def get_working_proxies(refresh: bool = False):
             working_proxies.append(future.proxy)
         except KeyboardInterrupt:
             sys.exit()
-        except:
+        except requests.RequestException:
             continue
 
     with open("proxies.txt", "w") as f:
         f.write("\n".join(working_proxies))
 
-    os.system("cls")
+    clear_console()
 
     return [None] + working_proxies

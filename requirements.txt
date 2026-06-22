@@ -1,4 +1,4 @@
-requests-futures
-requests
-pillow
-tqdm
+requests-futures==1.0.2
+requests==2.34.2
+pillow==12.2.0
+tqdm==4.68.3

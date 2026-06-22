@@ -11,7 +11,7 @@ import threading
 import contextlib
 import subprocess
 from shutil import which
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import requests
 from tqdm import tqdm
@@ -19,9 +19,19 @@ from tqdm import tqdm
 import k2s
 from utils import get_working_proxies
 
+DEFAULT_USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/137.0.0.0 Safari/537.36"
+)
+FILE_URL_RE = re.compile(r"https://(?:k2s\.cc|keep2share\.cc)/file/([^?/]+)(?:[/?].*)?$")
+MIN_SPLIT_SIZE = 1024 * 1024 * 20
+TMP_DIR = pathlib.Path("tmp")
+URLS_CACHE_PATH = pathlib.Path("urls.json")
+
 WORKING_PROXY_LIST = []
-PROXIES = get_working_proxies()
-PROXIES_LOCK = [threading.Lock() for _ in range(len(PROXIES))]
+PROXIES = []
+PROXIES_LOCK = []
 
 URL_LOCKS = None
 START_TIME = time.time()
@@ -30,17 +40,47 @@ BYTES_PER_SPLIT = 1024 * 1024 * 16
 BLOCK_SIZE = 1024 * 32
 
 def parse_size(size: str) -> int:
-    units = {"B": 1, "KB": 2**10, "MB": 2**20, "GB": 2**30, "TB": 2**40 ,
-             "":  1, "KIB": 10**3, "MIB": 10**6, "GIB": 10**9, "TIB": 10**12}
+    units = {
+        "": 1,
+        "B": 1,
+        "KB": 10**3,
+        "MB": 10**6,
+        "GB": 10**9,
+        "TB": 10**12,
+        "KIB": 2**10,
+        "MIB": 2**20,
+        "GIB": 2**30,
+        "TIB": 2**40,
+    }
     m = re.match(r'^([\d\.]+)\s*([a-zA-Z]{0,3})$', str(size).strip())
+    if not m:
+        raise ValueError(f"Invalid size value: {size}")
+
     number, unit = float(m.group(1)), m.group(2).upper()
-    return int(number*units[unit])
+    if unit not in units:
+        raise ValueError(f"Unsupported size unit: {unit}")
+
+    return int(number * units[unit])
 
 def human_readable_bytes(num: int) -> str:
     for x in ['bytes', 'KB', 'MB', 'GB', 'TB']:
         if num < 1024.0:
             return "%3.3f %s" % (num, x)
         num /= 1024.0
+
+    return "%3.3f %s" % (num, "PB")
+
+
+def clear_console() -> None:
+    os.system("cls" if os.name == "nt" else "clear")
+
+
+def extract_file_id(url: str) -> Optional[str]:
+    match = FILE_URL_RE.fullmatch(url.strip())
+    if not match:
+        return None
+
+    return match.group(1)
 
 def buildRange(value: int, numsplits: int) -> Dict:
 
@@ -67,11 +107,16 @@ def main(urls: List[str], filename: str) -> None:
         print("Please Enter some url to begin download.")
         return
 
-    headers = {"User-Agent":"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36"}
+    headers = {"User-Agent": DEFAULT_USER_AGENT}
     stop = False
     done_count = 0
 
-    sizeInBytes = requests.head(urls[-1], allow_redirects=True, headers=headers).headers.get('Content-Length', None)
+    sizeInBytes = requests.head(
+        urls[-1],
+        allow_redirects=True,
+        headers=headers,
+        timeout=20,
+    ).headers.get('Content-Length', None)
     if not sizeInBytes:
         print("Size cannot be determined.")
         return
@@ -89,10 +134,9 @@ def main(urls: List[str], filename: str) -> None:
         nonlocal done_count
         chunk_start_time = time.time()
         total_size_in_bytes= int(sizePerRange)
-        tmp_filename = os.path.join("tmp", f"{filename}.part{str(idx).zfill(len(str(splitBy)))}")
+        tmp_filename = TMP_DIR / f"{filename}.part{str(idx).zfill(len(str(splitBy)))}"
         str_range = "-".join([human_readable_bytes(int(bytes)) for bytes in irange.split('-')])
         f = io.BytesIO()
-        progress_bar = None
         proxy_idx = 0
 
         for i in WORKING_PROXY_LIST:
@@ -121,7 +165,7 @@ def main(urls: List[str], filename: str) -> None:
                 headers={"Range": f"bytes={irange}", "User-Agent": headers["User-Agent"]},
                 stream=True,
                 proxies=prox,
-                timeout=20
+                timeout=20,
             )
 
             for data in req.iter_content(BLOCK_SIZE):
@@ -159,9 +203,11 @@ def main(urls: List[str], filename: str) -> None:
                 if irange["inUse"] or irange["downloaded"]:
                     continue
 
-                tmp_filename = os.path.join("tmp", f"{filename}.part{str(idx).zfill(len(str(splitBy)))}")
-                if os.path.exists(tmp_filename):
-                    og_data = open(tmp_filename, "rb").read()
+                tmp_filename = TMP_DIR / f"{filename}.part{str(idx).zfill(len(str(splitBy)))}"
+                if tmp_filename.exists():
+                    with open(tmp_filename, "rb") as downloaded_chunk:
+                        og_data = downloaded_chunk.read()
+
                     if math.isclose(len(og_data), ranges[idx]["bytes"], abs_tol=1):
                         if not irange["downloaded"]:
                             total_iter.update(ranges[idx]["bytes"])
@@ -170,7 +216,7 @@ def main(urls: List[str], filename: str) -> None:
                             irange["downloaded"] = True
                             continue
                     else:
-                        os.remove(tmp_filename)
+                        tmp_filename.unlink()
 
                 for th_idx in range(batch_count):
                     if URL_LOCKS[th_idx].locked():
@@ -183,7 +229,7 @@ def main(urls: List[str], filename: str) -> None:
 
     except KeyboardInterrupt:
         stop = True
-        os.system("cls")
+        clear_console()
         print("Download Stopped")
         return
 
@@ -204,7 +250,7 @@ def main(urls: List[str], filename: str) -> None:
     # Reassemble file in correct order
     with open(filename, 'wb') as fh:
         for idx in range(len(ranges)):
-            tmp_filename = os.path.join("tmp", f"{filename}.part{str(idx).zfill(len(str(splitBy)))}")
+            tmp_filename = TMP_DIR / f"{filename}.part{str(idx).zfill(len(str(splitBy)))}"
             with open(tmp_filename, "rb") as fr:
                 fh.write(fr.read())
             os.remove(tmp_filename)
@@ -213,8 +259,25 @@ def main(urls: List[str], filename: str) -> None:
     print('File Size: {} bytes'.format(human_readable_bytes(os.path.getsize(filename))))
 
 def check_vid(video_path: pathlib.Path) -> bool:
-    output = subprocess.check_output(f'ffmpeg -i {video_path} -c copy -f null /dev/null -v warning', shell=True, stderr=subprocess.STDOUT)
-    return not bool(output)
+    result = subprocess.run(
+        [
+            "ffmpeg",
+            "-v",
+            "warning",
+            "-i",
+            str(video_path),
+            "-c",
+            "copy",
+            "-f",
+            "null",
+            "-",
+        ],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    return not bool(result.stderr.strip())
 
 
 if __name__ == '__main__':
@@ -231,33 +294,37 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
 
-    if "k2s.cc" not in args.url:
-        print("Invalid URL")
-        exit()
-
-    pathlib.Path("tmp").mkdir(parents=True, exist_ok=True)
-    file_id = re.findall(r"https:\/\/(k2s.cc|keep2share.cc)\/file\/(.*?)(\?|\/|$)", args.url)
+    file_id = extract_file_id(args.url)
     if not file_id:
         print("Invalid URL")
         exit()
 
-    if parse_size(args.size) < 1024 * 1024 * 20:
+    TMP_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        split_size = parse_size(args.size)
+    except ValueError as exc:
+        print(exc)
+        exit()
+
+    if split_size < MIN_SPLIT_SIZE:
         print("Split size must be at least 20M")
         exit()
 
-    file_id = file_id[0][1]
     if not args.filename:
         file_name = k2s.get_name(file_id)
     else:
         file_name = args.filename
     batch_count = int(args.batch_count)
-    BYTES_PER_SPLIT = parse_size(args.size)
+    BYTES_PER_SPLIT = split_size
+    PROXIES = get_working_proxies()
+    PROXIES_LOCK = [threading.Lock() for _ in range(len(PROXIES))]
 
-    if not pathlib.Path("urls.json").exists():
-        with open("urls.json", "w") as f:
+    if not URLS_CACHE_PATH.exists():
+        with open(URLS_CACHE_PATH, "w") as f:
             json.dump({}, f)
 
-    with open("urls.json", "r") as f:
+    with open(URLS_CACHE_PATH, "r") as f:
         past_urls = json.load(f)
 
     urls = []
@@ -268,7 +335,7 @@ if __name__ == '__main__':
         urls = k2s.generate_download_urls(file_id, batch_count)
 
     past_urls[file_id] = urls
-    with open("urls.json", "w") as f:
+    with open(URLS_CACHE_PATH, "w") as f:
         json.dump(past_urls, f, indent=4)
 
     URL_LOCKS = [threading.Lock() for _ in range(batch_count)]

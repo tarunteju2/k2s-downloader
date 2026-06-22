@@ -1,5 +1,7 @@
 import sys
 import time
+from typing import Optional
+
 import requests
 import contextlib
 from io import BytesIO
@@ -19,20 +21,29 @@ DOMAINS = [
     # "fboom.me",
     # "fast-download.me"
 ]
+REQUEST_TIMEOUT = 20
+
+
+def build_proxy(proxy: Optional[str]) -> Optional[dict]:
+    if proxy:
+        return {'https': f'http://{proxy}'}
+
+    return None
 
 def generate_from_key(url: str, key: str, proxy: str) -> str:
-
-    if proxy:
-        prox = {'https': f'http://{proxy}'}
-    else:
-        prox = None
+    prox = build_proxy(proxy)
     
     while True:
-        with contextlib.suppress(Exception):
-            r = requests.post(f"https://{choice(DOMAINS)}/api/v2/getUrl", json={
-                "file_id": url,
-                "free_download_key": key
-            }, proxies=prox).json()
+        with contextlib.suppress(requests.RequestException, ValueError):
+            r = requests.post(
+                f"https://{choice(DOMAINS)}/api/v2/getUrl",
+                json={
+                    "file_id": url,
+                    "free_download_key": key
+                },
+                proxies=prox,
+                timeout=REQUEST_TIMEOUT,
+            ).json()
             return r['url']
 
 def generate_download_urls(file_id: str, count: int = 1, skip: int = 0) -> list:
@@ -44,32 +55,38 @@ def generate_download_urls(file_id: str, count: int = 1, skip: int = 0) -> list:
     working_link = False
     free_download_key = ""
     urls = []
-    captcha = requests.post(f"https://{choice(DOMAINS)}/api/v2/requestCaptcha").json()
-    r = requests.get(captcha["captcha_url"])
+    captcha = requests.post(
+        f"https://{choice(DOMAINS)}/api/v2/requestCaptcha",
+        timeout=REQUEST_TIMEOUT,
+    ).json()
+    r = requests.get(captcha["captcha_url"], timeout=REQUEST_TIMEOUT)
     im = Image.open(BytesIO(r.content))
     im.show()
     response = input(f"Enter captcha response: ")
 
     for url in proxy_urls:
         print(f"\033[KTrying {url}", end='\r')
-        prox = {'https': f'http://{url}'}
-        if not url:
-            prox = None
+        prox = build_proxy(url)
         while not working_link:
             try:
-                free_r = requests.post(f"https://{choice(DOMAINS)}/api/v2/getUrl", json={
-                    "file_id": file_id,
-                    "captcha_challenge": captcha["challenge"],
-                    "captcha_response": response
-                }, proxies=prox, timeout=5).json()
+                free_r = requests.post(
+                    f"https://{choice(DOMAINS)}/api/v2/getUrl",
+                    json={
+                        "file_id": file_id,
+                        "captcha_challenge": captcha["challenge"],
+                        "captcha_response": response
+                    },
+                    proxies=prox,
+                    timeout=5,
+                ).json()
             except KeyboardInterrupt:
                 sys.exit()
-            except :
+            except (requests.RequestException, ValueError):
                 break
-
+ 
             if free_r['status'] == "error":
                 if free_r["message"] == "Invalid captcha code":
-                    r = requests.get(captcha["captcha_url"])
+                    r = requests.get(captcha["captcha_url"], timeout=REQUEST_TIMEOUT)
                     im = Image.open(BytesIO(r.content))
                     im.show()
                     response = input(f"Enter captcha response: ")
@@ -113,7 +130,7 @@ def generate_download_urls(file_id: str, count: int = 1, skip: int = 0) -> list:
                         urls.append(result.json()['url'])
                     except KeyboardInterrupt:
                         sys.exit()
-                    except:
+                    except (requests.RequestException, ValueError):
                         continue
 
     if not working_link:
@@ -122,7 +139,11 @@ def generate_download_urls(file_id: str, count: int = 1, skip: int = 0) -> list:
     return urls[:count]
 
 def get_name(file_id: str) -> str:
-    r = requests.post(f"https://{choice(DOMAINS)}/api/v2/getFilesInfo", json={
-        "ids": [file_id]
-    }).json()
+    r = requests.post(
+        f"https://{choice(DOMAINS)}/api/v2/getFilesInfo",
+        json={
+            "ids": [file_id]
+        },
+        timeout=REQUEST_TIMEOUT,
+    ).json()
     return r['files'][0]['name']

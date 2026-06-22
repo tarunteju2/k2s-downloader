@@ -1,18 +1,17 @@
 # K2S Downloader
 
 ## Environment
-Tested on Python 3.10, Windows.
-Not tested on others
+Tested with Python 3.12.
+Supports `k2s.cc` and `keep2share.cc` file URLs.
 
 ## Note
-For download corruption check to work, you should have ffmpeg available in environmental path.
+For download corruption checks, `ffmpeg` should be available on your `PATH`.
 
 ## Installation
 1. Download the repo
-2. pip install -r requirements.txt
+2. `pip install -r requirements.txt`
 
 ## Usage
 ```
-main.py <link> --filename <filename> --split-size 20mb
+python main.py <link> --filename <filename> --split-size 20MB
 ```
-
