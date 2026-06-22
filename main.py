@@ -17,7 +17,7 @@ import requests
 from tqdm import tqdm
 
 import k2s
-from utils import get_working_proxies
+from utils import clear_console, get_working_proxies
 
 DEFAULT_USER_AGENT = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -69,12 +69,6 @@ def human_readable_bytes(num: int) -> str:
         num /= 1024.0
 
     return "%3.3f %s" % (num, "PB")
-
-
-def clear_console() -> None:
-    os.system("cls" if os.name == "nt" else "clear")
-
-
 def extract_file_id(url: str) -> Optional[str]:
     match = FILE_URL_RE.fullmatch(url.strip())
     if not match:

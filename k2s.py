@@ -83,7 +83,7 @@ def generate_download_urls(file_id: str, count: int = 1, skip: int = 0) -> list:
                 sys.exit()
             except (requests.RequestException, ValueError):
                 break
- 
+
             if free_r['status'] == "error":
                 if free_r["message"] == "Invalid captcha code":
                     r = requests.get(captcha["captcha_url"], timeout=REQUEST_TIMEOUT)

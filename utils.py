@@ -1,6 +1,7 @@
 import os
 import sys
 import pathlib
+import subprocess
 from concurrent.futures import as_completed
 
 import requests
@@ -11,7 +12,11 @@ REQUEST_TIMEOUT = 20
 
 
 def clear_console() -> None:
-    os.system("cls" if os.name == "nt" else "clear")
+    if os.name == "nt":
+        subprocess.run(["cmd", "/c", "cls"], check=False)
+        return
+
+    print("\033[2J\033[H", end="", flush=True)
 
 def get_working_proxies(refresh: bool = False):
 
