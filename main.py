@@ -247,7 +247,7 @@ def main(urls: List[str], filename: str) -> None:
             tmp_filename = TMP_DIR / f"{filename}.part{str(idx).zfill(len(str(splitBy)))}"
             with open(tmp_filename, "rb") as fr:
                 fh.write(fr.read())
-            os.remove(tmp_filename)
+            tmp_filename.unlink()
 
     print("Finished Writing file %s" % filename)
     print('File Size: {} bytes'.format(human_readable_bytes(os.path.getsize(filename))))

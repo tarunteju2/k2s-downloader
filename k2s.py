@@ -81,7 +81,7 @@ def generate_download_urls(file_id: str, count: int = 1, skip: int = 0) -> list:
                 ).json()
             except KeyboardInterrupt:
                 sys.exit()
-            except (requests.RequestException, ValueError):
+            except (requests.RequestException, requests.exceptions.JSONDecodeError):
                 break
 
             if free_r['status'] == "error":
@@ -130,7 +130,7 @@ def generate_download_urls(file_id: str, count: int = 1, skip: int = 0) -> list:
                         urls.append(result.json()['url'])
                     except KeyboardInterrupt:
                         sys.exit()
-                    except (requests.RequestException, ValueError):
+                    except (requests.RequestException, requests.exceptions.JSONDecodeError):
                         continue
 
     if not working_link:
