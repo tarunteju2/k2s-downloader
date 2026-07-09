@@ -29,7 +29,7 @@ BATCH_COUNT = 0
 
 BYTES_PER_SPLIT = 1024 * 1024 * 16
 BLOCK_SIZE = 1024 * 32
-FFMPEG_NULL_OUTPUT = "-"
+FFMPEG_NULL_OUTPUT = "NUL" if os.name == "nt" else "-"
 
 def parse_size(size: str) -> int:
     units = {

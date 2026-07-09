@@ -7,6 +7,8 @@ import requests
 from requests_futures.sessions import FuturesSession
 from tqdm import tqdm
 
+MAX_PROXY_CHECK_WORKERS = 100
+
 
 def _filter_proxy_values(values) -> list:
     return [value for value in values if value and ":" in value]
@@ -15,8 +17,12 @@ def _filter_proxy_values(values) -> list:
 def clear_screen() -> None:
     if os.name == "nt":
         os.system("cls")
-    elif os.getenv("TERM"):
-        os.system("clear")
+        return
+
+    if os.getenv("TERM") and os.system("clear") == 0:
+        return
+
+    print("\033[2J\033[H", end="")
 
 
 def _read_cached_proxies() -> list:
@@ -60,7 +66,7 @@ def get_working_proxies(refresh: bool = False):
         return [None]
 
     # Empty proxy lists return above, so max_workers is always at least 1 here.
-    session = FuturesSession(max_workers=min(100, len(proxies)))
+    session = FuturesSession(max_workers=min(MAX_PROXY_CHECK_WORKERS, len(proxies)))
     futures = []
     
     for proxy in proxies:
