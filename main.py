@@ -97,6 +97,9 @@ def main(urls: List[str], filename: str) -> None:
     ranges = buildRange(int(sizeInBytes), splitBy)
     sizePerRange = int(round(1 + 0 * int(sizeInBytes)/(splitBy*1.0) + int(sizeInBytes)/(splitBy*1.0)-1, 0))
     total_iter = tqdm(desc=f"[{done_count}/{len(ranges)}] Downloaded", total=int(sizeInBytes), unit='iB', unit_scale=True, unit_divisor=1024)
+
+    def update_progress() -> None:
+        total_iter.set_description_str(f"[{done_count}/{len(ranges)}] Downloaded")
     
     def downloadChunk(idx, irange, th_idx):
 
@@ -163,7 +166,7 @@ def main(urls: List[str], filename: str) -> None:
         ranges[idx]["inUse"] = False
         ranges[idx]["downloaded"] = True
         done_count += 1
-        total_iter.set_description_str(f"[{done_count}/{len(ranges)}] Downloaded")
+        update_progress()
         URL_LOCKS[th_idx].release()
         PROXIES_LOCK[proxy_idx].release()
 
@@ -180,7 +183,7 @@ def main(urls: List[str], filename: str) -> None:
                         if not irange["downloaded"]:
                             total_iter.update(ranges[idx]["bytes"])
                             done_count += 1
-                            total_iter.set_description_str(f"[{done_count}/{len(ranges)}] Downloaded")
+                            update_progress()
                             irange["downloaded"] = True
                             continue
                     else:
@@ -228,7 +231,7 @@ def main(urls: List[str], filename: str) -> None:
 
 def check_vid(video_path: pathlib.Path) -> bool:
     result = subprocess.run(
-        ["ffmpeg", "-v", "warning", "-i", str(video_path), "-c", "copy", "-f", "null", "-"],
+        ["ffmpeg", "-v", "warning", "-i", str(video_path), "-c", "copy", "-f", "null", os.devnull],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
