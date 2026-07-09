@@ -50,7 +50,7 @@ class VideoCheckTests(unittest.TestCase):
             self.assertEqual(args[:3], ["ffmpeg", "-v", "warning"])
             self.assertEqual(args[4], str(video_path))
             self.assertEqual(args[-2], "null")
-            self.assertEqual(args[-1], os.devnull)
+            self.assertEqual(args[-1], main.FFMPEG_NULL_OUTPUT)
 
 
 class ProxyFallbackTests(unittest.TestCase):

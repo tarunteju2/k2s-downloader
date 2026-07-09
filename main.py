@@ -29,6 +29,7 @@ BATCH_COUNT = 0
 
 BYTES_PER_SPLIT = 1024 * 1024 * 16
 BLOCK_SIZE = 1024 * 32
+FFMPEG_NULL_OUTPUT = "-"
 
 def parse_size(size: str) -> int:
     units = {
@@ -96,7 +97,6 @@ def main(urls: List[str], filename: str) -> None:
     # Split total num bytes into ranges
     splitBy = math.ceil(int(sizeInBytes) / BYTES_PER_SPLIT)
     ranges = buildRange(int(sizeInBytes), splitBy)
-    sizePerRange = int(round(float(sizeInBytes) / splitBy, 0))
     total_iter = tqdm(desc=f"[{done_count}/{len(ranges)}] Downloaded", total=int(sizeInBytes), unit='iB', unit_scale=True, unit_divisor=1024)
 
     def update_progress() -> None:
@@ -106,11 +106,8 @@ def main(urls: List[str], filename: str) -> None:
 
         nonlocal done_count
         chunk_start_time = time.time()
-        total_size_in_bytes= int(sizePerRange)
         tmp_filename = os.path.join("tmp", f"{filename}.part{str(idx).zfill(len(str(splitBy)))}")
-        str_range = "-".join([human_readable_bytes(int(bytes)) for bytes in irange.split('-')])
         f = io.BytesIO()
-        progress_bar = None
         proxy_idx = 0
 
         for i in WORKING_PROXY_LIST:
@@ -127,11 +124,8 @@ def main(urls: List[str], filename: str) -> None:
 
         if PROXIES[proxy_idx]:
             prox = {'https': f'http://{PROXIES[proxy_idx]}'}
-            prefix = f"[{PROXIES[proxy_idx]}]"
         else:
             prox = None
-            prefix = "[LOCAL]"
-        # progress_bar = tqdm(desc=f"{prefix} {str_range}", total=total_size_in_bytes, unit='iB', unit_scale=True, unit_divisor=1024, leave=False)
 
         with contextlib.suppress(Exception):
             req = requests.get(
@@ -151,7 +145,6 @@ def main(urls: List[str], filename: str) -> None:
                 f.write(data)
 
         if not math.isclose(len(f.getvalue()), ranges[idx]["bytes"], abs_tol=1):
-            # progress_bar.close()
             total_iter.update(-len(f.getvalue()))
             ranges[idx]["inUse"] = False
             URL_LOCKS[th_idx].release()
@@ -163,7 +156,6 @@ def main(urls: List[str], filename: str) -> None:
 
         if proxy_idx not in WORKING_PROXY_LIST:
             WORKING_PROXY_LIST.append(proxy_idx)
-        # progress_bar.close()
         ranges[idx]["inUse"] = False
         ranges[idx]["downloaded"] = True
         done_count += 1
@@ -232,7 +224,7 @@ def main(urls: List[str], filename: str) -> None:
 
 def check_vid(video_path: pathlib.Path) -> bool:
     result = subprocess.run(
-        ["ffmpeg", "-v", "warning", "-i", str(video_path), "-c", "copy", "-f", "null", os.devnull],
+        ["ffmpeg", "-v", "warning", "-i", str(video_path), "-c", "copy", "-f", "null", FFMPEG_NULL_OUTPUT],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,

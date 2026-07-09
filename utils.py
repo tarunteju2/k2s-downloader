@@ -8,6 +8,10 @@ from requests_futures.sessions import FuturesSession
 from tqdm import tqdm
 
 
+def _filter_proxy_values(values) -> list:
+    return [value for value in values if value and ":" in value]
+
+
 def clear_screen() -> None:
     if os.name == "nt":
         os.system("cls")
@@ -20,7 +24,7 @@ def _read_cached_proxies() -> list:
         return []
 
     with open("proxies.txt") as f:
-        return [proxy for proxy in f.read().splitlines() if proxy]
+        return _filter_proxy_values(f.read().splitlines())
 
 
 def get_working_proxies(refresh: bool = False):
@@ -48,7 +52,7 @@ def get_working_proxies(refresh: bool = False):
         print(f"Proxy fetch failed: {exc}. Falling back to direct connection only.")
         return [None]
 
-    proxies = [proxy for proxy in proxies if proxy]
+    proxies = _filter_proxy_values(proxies)
     working_proxies = []
     print(f"Checking {len(proxies)} proxies...")
 
