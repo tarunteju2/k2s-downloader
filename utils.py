@@ -8,10 +8,13 @@ from requests_futures.sessions import FuturesSession
 from tqdm import tqdm
 
 MAX_PROXY_CHECK_WORKERS = 100
+PROXY_PATTERN = r"^[^:\s]+:\d+$"
 
 
 def _filter_proxy_values(values) -> list:
-    return [value for value in values if value and ":" in value]
+    import re
+
+    return [value for value in values if value and re.match(PROXY_PATTERN, value)]
 
 
 def clear_screen() -> None:

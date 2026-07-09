@@ -30,10 +30,12 @@ BATCH_COUNT = 0
 BYTES_PER_SPLIT = 1024 * 1024 * 16
 BLOCK_SIZE = 1024 * 32
 FFMPEG_NULL_OUTPUT = "NUL" if os.name == "nt" else "-"
+DOWNLOAD_DESC = "[{done_count}/{total_ranges}] Downloaded"
 
 def parse_size(size: str) -> int:
     units = {
         "B": 1,
+        # Keep legacy KB/MB/GB/TB inputs binary-sized for backward compatibility.
         "KB": 2**10,
         "MB": 2**20,
         "GB": 2**30,
@@ -97,10 +99,16 @@ def main(urls: List[str], filename: str) -> None:
     # Split total num bytes into ranges
     splitBy = math.ceil(int(sizeInBytes) / BYTES_PER_SPLIT)
     ranges = buildRange(int(sizeInBytes), splitBy)
-    total_iter = tqdm(desc=f"[{done_count}/{len(ranges)}] Downloaded", total=int(sizeInBytes), unit='iB', unit_scale=True, unit_divisor=1024)
+    total_iter = tqdm(
+        desc=DOWNLOAD_DESC.format(done_count=done_count, total_ranges=len(ranges)),
+        total=int(sizeInBytes),
+        unit='iB',
+        unit_scale=True,
+        unit_divisor=1024,
+    )
 
     def update_progress() -> None:
-        total_iter.set_description_str(f"[{done_count}/{len(ranges)}] Downloaded")
+        total_iter.set_description_str(DOWNLOAD_DESC.format(done_count=done_count, total_ranges=len(ranges)))
     
     def downloadChunk(idx, irange, th_idx):
 
@@ -236,7 +244,7 @@ def is_supported_url(url: str) -> bool:
 
 
 def extract_file_id(url: str) -> str:
-    file_id = re.findall(r"https://(k2s.cc|keep2share.cc)/file/(.*?)(\?|/|$)", url)
+    file_id = re.findall(r"https://(k2s\.cc|keep2share\.cc)/file/(.*?)(\?|/|$)", url)
     if not file_id:
         raise ValueError("Invalid URL")
     return file_id[0][1]
