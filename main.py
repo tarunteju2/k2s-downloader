@@ -96,7 +96,7 @@ def main(urls: List[str], filename: str) -> None:
     # Split total num bytes into ranges
     splitBy = math.ceil(int(sizeInBytes) / BYTES_PER_SPLIT)
     ranges = buildRange(int(sizeInBytes), splitBy)
-    sizePerRange = int(round(int(sizeInBytes) / splitBy, 0))
+    sizePerRange = int(round(float(sizeInBytes) / splitBy, 0))
     total_iter = tqdm(desc=f"[{done_count}/{len(ranges)}] Downloaded", total=int(sizeInBytes), unit='iB', unit_scale=True, unit_divisor=1024)
 
     def update_progress() -> None:
@@ -240,11 +240,11 @@ def check_vid(video_path: pathlib.Path) -> bool:
     return not bool(result.stderr)
 
 def is_supported_url(url: str) -> bool:
-    return bool(re.match(r"^https:\/\/(k2s\.cc|keep2share\.cc)\/file\/", url))
+    return bool(re.match(r"^https://(k2s\.cc|keep2share\.cc)/file/", url))
 
 
 def extract_file_id(url: str) -> str:
-    file_id = re.findall(r"https:\/\/(k2s.cc|keep2share.cc)\/file\/(.*?)(\?|\/|$)", url)
+    file_id = re.findall(r"https://(k2s.cc|keep2share.cc)/file/(.*?)(\?|/|$)", url)
     if not file_id:
         raise ValueError("Invalid URL")
     return file_id[0][1]
