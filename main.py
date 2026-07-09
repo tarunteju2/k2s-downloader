@@ -25,6 +25,7 @@ PROXIES_LOCK = []
 
 URL_LOCKS = None
 START_TIME = time.time()
+BATCH_COUNT = 0
 
 BYTES_PER_SPLIT = 1024 * 1024 * 16
 BLOCK_SIZE = 1024 * 32
@@ -95,7 +96,7 @@ def main(urls: List[str], filename: str) -> None:
     # Split total num bytes into ranges
     splitBy = math.ceil(int(sizeInBytes) / BYTES_PER_SPLIT)
     ranges = buildRange(int(sizeInBytes), splitBy)
-    sizePerRange = int(round(int(sizeInBytes) / (splitBy * 1.0), 0))
+    sizePerRange = int(round(int(sizeInBytes) / splitBy, 0))
     total_iter = tqdm(desc=f"[{done_count}/{len(ranges)}] Downloaded", total=int(sizeInBytes), unit='iB', unit_scale=True, unit_divisor=1024)
 
     def update_progress() -> None:
@@ -189,7 +190,7 @@ def main(urls: List[str], filename: str) -> None:
                     else:
                         os.remove(tmp_filename)
 
-                for th_idx in range(len(URL_LOCKS)):
+                for th_idx in range(BATCH_COUNT):
                     if URL_LOCKS[th_idx].locked():
                         continue
 
@@ -263,7 +264,7 @@ def create_parser() -> argparse.ArgumentParser:
 
 
 def run_cli(argv=None) -> int:
-    global URL_LOCKS, START_TIME, BYTES_PER_SPLIT, PROXIES, PROXIES_LOCK
+    global URL_LOCKS, START_TIME, BYTES_PER_SPLIT, PROXIES, PROXIES_LOCK, BATCH_COUNT
 
     parser = create_parser()
     args = parser.parse_args(argv)
@@ -286,6 +287,7 @@ def run_cli(argv=None) -> int:
     pathlib.Path("tmp").mkdir(parents=True, exist_ok=True)
 
     batch_count = int(args.batch_count)
+    BATCH_COUNT = batch_count
     PROXIES = get_working_proxies()
     PROXIES_LOCK = [threading.Lock() for _ in range(len(PROXIES))]
 

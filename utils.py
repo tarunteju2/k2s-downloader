@@ -52,7 +52,7 @@ def get_working_proxies(refresh: bool = False):
     working_proxies = []
     print(f"Checking {len(proxies)} proxies...")
 
-    if not proxies:
+    if len(proxies) == 0:
         return [None]
 
     # Empty proxy lists return above, so max_workers is always at least 1 here.
