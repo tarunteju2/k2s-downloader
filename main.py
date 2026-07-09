@@ -95,7 +95,7 @@ def main(urls: List[str], filename: str) -> None:
     # Split total num bytes into ranges
     splitBy = math.ceil(int(sizeInBytes) / BYTES_PER_SPLIT)
     ranges = buildRange(int(sizeInBytes), splitBy)
-    sizePerRange = int(round(1 + 0 * int(sizeInBytes)/(splitBy*1.0) + int(sizeInBytes)/(splitBy*1.0)-1, 0))
+    sizePerRange = int(round(int(sizeInBytes) / (splitBy * 1.0), 0))
     total_iter = tqdm(desc=f"[{done_count}/{len(ranges)}] Downloaded", total=int(sizeInBytes), unit='iB', unit_scale=True, unit_divisor=1024)
 
     def update_progress() -> None:

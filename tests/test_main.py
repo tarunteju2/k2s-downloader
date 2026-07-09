@@ -49,7 +49,8 @@ class VideoCheckTests(unittest.TestCase):
             args = run_mock.call_args.args[0]
             self.assertEqual(args[:3], ["ffmpeg", "-v", "warning"])
             self.assertEqual(args[4], str(video_path))
-            self.assertEqual(args[-2:], ["null", os.devnull])
+            self.assertEqual(args[-2], "null")
+            self.assertEqual(args[-1], os.devnull)
 
 
 class ProxyFallbackTests(unittest.TestCase):

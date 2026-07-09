@@ -55,6 +55,7 @@ def get_working_proxies(refresh: bool = False):
     if not proxies:
         return [None]
 
+    # Empty proxy lists return above, so max_workers is always at least 1 here.
     session = FuturesSession(max_workers=min(100, len(proxies)))
     futures = []
     
