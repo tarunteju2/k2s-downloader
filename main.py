@@ -17,11 +17,11 @@ import requests
 from tqdm import tqdm
 
 import k2s
-from utils import get_working_proxies
+from utils import clear_screen, get_working_proxies
 
 WORKING_PROXY_LIST = []
-PROXIES = get_working_proxies()
-PROXIES_LOCK = [threading.Lock() for _ in range(len(PROXIES))]
+PROXIES = []
+PROXIES_LOCK = []
 
 URL_LOCKS = None
 START_TIME = time.time()
@@ -30,10 +30,24 @@ BYTES_PER_SPLIT = 1024 * 1024 * 16
 BLOCK_SIZE = 1024 * 32
 
 def parse_size(size: str) -> int:
-    units = {"B": 1, "KB": 2**10, "MB": 2**20, "GB": 2**30, "TB": 2**40 ,
-             "":  1, "KIB": 10**3, "MIB": 10**6, "GIB": 10**9, "TIB": 10**12}
+    units = {
+        "B": 1,
+        "KB": 2**10,
+        "MB": 2**20,
+        "GB": 2**30,
+        "TB": 2**40,
+        "": 1,
+        "KIB": 2**10,
+        "MIB": 2**20,
+        "GIB": 2**30,
+        "TIB": 2**40,
+    }
     m = re.match(r'^([\d\.]+)\s*([a-zA-Z]{0,3})$', str(size).strip())
+    if not m:
+        raise ValueError(f"Invalid size: {size}")
     number, unit = float(m.group(1)), m.group(2).upper()
+    if unit not in units:
+        raise ValueError(f"Unsupported size unit: {unit}")
     return int(number*units[unit])
 
 def human_readable_bytes(num: int) -> str:
@@ -149,7 +163,7 @@ def main(urls: List[str], filename: str) -> None:
         ranges[idx]["inUse"] = False
         ranges[idx]["downloaded"] = True
         done_count += 1
-        total_iter.desc = f"[{done_count}/{len(ranges)}] Downloaded"
+        total_iter.set_description_str(f"[{done_count}/{len(ranges)}] Downloaded")
         URL_LOCKS[th_idx].release()
         PROXIES_LOCK[proxy_idx].release()
 
@@ -166,13 +180,13 @@ def main(urls: List[str], filename: str) -> None:
                         if not irange["downloaded"]:
                             total_iter.update(ranges[idx]["bytes"])
                             done_count += 1
-                            total_iter.desc = f"[{done_count}/{len(ranges)}] Downloaded"
+                            total_iter.set_description_str(f"[{done_count}/{len(ranges)}] Downloaded")
                             irange["downloaded"] = True
                             continue
                     else:
                         os.remove(tmp_filename)
 
-                for th_idx in range(batch_count):
+                for th_idx in range(len(URL_LOCKS)):
                     if URL_LOCKS[th_idx].locked():
                         continue
 
@@ -183,7 +197,7 @@ def main(urls: List[str], filename: str) -> None:
 
     except KeyboardInterrupt:
         stop = True
-        os.system("cls")
+        clear_screen()
         print("Download Stopped")
         return
 
@@ -213,12 +227,26 @@ def main(urls: List[str], filename: str) -> None:
     print('File Size: {} bytes'.format(human_readable_bytes(os.path.getsize(filename))))
 
 def check_vid(video_path: pathlib.Path) -> bool:
-    output = subprocess.check_output(f'ffmpeg -i {video_path} -c copy -f null /dev/null -v warning', shell=True, stderr=subprocess.STDOUT)
-    return not bool(output)
+    result = subprocess.run(
+        ["ffmpeg", "-v", "warning", "-i", str(video_path), "-c", "copy", "-f", "null", "-"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    return not bool(result.stderr)
+
+def is_supported_url(url: str) -> bool:
+    return bool(re.match(r"^https:\/\/(k2s\.cc|keep2share\.cc)\/file\/", url))
 
 
-if __name__ == '__main__':
+def extract_file_id(url: str) -> str:
+    file_id = re.findall(r"https:\/\/(k2s.cc|keep2share.cc)\/file\/(.*?)(\?|\/|$)", url)
+    if not file_id:
+        raise ValueError("Invalid URL")
+    return file_id[0][1]
 
+
+def create_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description='K2S Downloader')
     parser.add_argument('url', help='k2s url to download', action='store')
     parser.add_argument('--filename', type=str,
@@ -228,30 +256,39 @@ if __name__ == '__main__':
                         help='number of connections to use (default 20)', default=20)
     parser.add_argument('--split-size', dest='size', action='store',
                         help='Size to split at (default 20M)', default=1024 * 1024 * 20)
+    return parser
 
-    args = parser.parse_args()
 
-    if "k2s.cc" not in args.url:
+def run_cli(argv=None) -> int:
+    global URL_LOCKS, START_TIME, BYTES_PER_SPLIT, PROXIES, PROXIES_LOCK
+
+    parser = create_parser()
+    args = parser.parse_args(argv)
+
+    if not is_supported_url(args.url):
         print("Invalid URL")
-        exit()
+        return 1
+
+    try:
+        split_size = parse_size(args.size)
+        file_id = extract_file_id(args.url)
+    except ValueError as exc:
+        print(exc)
+        return 1
+
+    if split_size < 1024 * 1024 * 20:
+        print("Split size must be at least 20M")
+        return 1
 
     pathlib.Path("tmp").mkdir(parents=True, exist_ok=True)
-    file_id = re.findall(r"https:\/\/(k2s.cc|keep2share.cc)\/file\/(.*?)(\?|\/|$)", args.url)
-    if not file_id:
-        print("Invalid URL")
-        exit()
 
-    if parse_size(args.size) < 1024 * 1024 * 20:
-        print("Split size must be at least 20M")
-        exit()
-
-    file_id = file_id[0][1]
-    if not args.filename:
-        file_name = k2s.get_name(file_id)
-    else:
-        file_name = args.filename
     batch_count = int(args.batch_count)
-    BYTES_PER_SPLIT = parse_size(args.size)
+    PROXIES = get_working_proxies()
+    PROXIES_LOCK = [threading.Lock() for _ in range(len(PROXIES))]
+
+    if not PROXIES:
+        PROXIES = [None]
+        PROXIES_LOCK = [threading.Lock()]
 
     if not pathlib.Path("urls.json").exists():
         with open("urls.json", "w") as f:
@@ -267,12 +304,18 @@ if __name__ == '__main__':
     if len(urls) < batch_count:
         urls = k2s.generate_download_urls(file_id, batch_count)
 
+    if not args.filename:
+        file_name = k2s.get_name(file_id)
+    else:
+        file_name = args.filename
+
     past_urls[file_id] = urls
     with open("urls.json", "w") as f:
         json.dump(past_urls, f, indent=4)
 
     URL_LOCKS = [threading.Lock() for _ in range(batch_count)]
     START_TIME = time.time()
+    BYTES_PER_SPLIT = split_size
     redownloaded = False
 
     while True:
@@ -287,3 +330,9 @@ if __name__ == '__main__':
                 else:
                     print("Video is still corrupted. Skipping.")
         break
+
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(run_cli())
